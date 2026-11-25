@@ -1,0 +1,18 @@
+# Python build / cache
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+*.spec
+
+# Runtime data (per-user, never commit)
+containers.json
+disks/
+logs/
+*.vhdx
+*.wincage
+
+# Local-only helpers
+_wph_*
+*.log
