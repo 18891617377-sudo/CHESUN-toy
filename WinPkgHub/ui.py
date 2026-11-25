@@ -153,6 +153,7 @@ class App:
         self.root.configure(bg=BG)
         self.root.geometry("1180x740")
         self.root.minsize(1080, 680)
+        self._load_window_icon()
 
         global FONT, MONO
         FONT = pick_font()
@@ -166,6 +167,26 @@ class App:
         self.root.bind("<Control-r>", lambda e: self.refresh_all())
         self.root.bind("<Control-R>", lambda e: self.refresh_all())
         self.root.after(300, self.refresh_all)
+
+    def _load_window_icon(self):
+        """加载 assets/icon.ico；图标缺失时不影响主程序启动。"""
+        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 "assets", "icon.ico")
+        if IS_WIN and os.path.exists(icon_path):
+            try:
+                self.root.iconbitmap(default=icon_path)
+            except tk.TclError:
+                pass
+        else:
+            png_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                     "assets", "icon.png")
+            if os.path.exists(png_path):
+                try:
+                    photo = tk.PhotoImage(file=png_path)
+                    self.root.iconphoto(True, photo)
+                    self.root._icon_photo = photo
+                except tk.TclError:
+                    pass
 
     # ---------------------------------------------------------- 布局
     def _build(self):

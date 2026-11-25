@@ -1,5 +1,7 @@
 # WinPkgHub
 
+![图标](assets/icon.png)
+
 Windows 8 磁贴风格的包管理器中枢：九个包管理器，一个窗口，随时切换调用；检测不到就当场自动部署。
 
 ![界面](preview/screenshot.png)
