@@ -20,31 +20,25 @@ from config import (
 )
 import engine
 
-# 两套主题：Win8 磁贴经典深色 + 清爽亮色
+# 全黑主题：纯黑背景，所有系统控件（滚动条/下拉/箭头/方框）统一为黑色系
 DARK = dict(
-    BG="#16181C", PANEL="#101216", INK="#FFFFFF", INK_DIM="#B7BEC7",
-    INK_MUTE="#7A8290", ACCENT="#0B78D0", LINE="#262A31",
-    BTN="#252A32", BTN_FG="#E6EBF1", ENTRY="#242830", ENTRY_FG="#F2F5F9",
-    CONSOLE_FG="#C9D0D8", OK_BG="#0E5C1B", OK_FG="#8CF3A2",
-    WARN_BG="#8A5A00", WARN_FG="#FFD98A", ERR_BG="#5C2020", ERR_FG="#FF9C9C",
-    CHIP="#1F242B", CHIP_FG="#9AA3AE", FOOT_HINT="#4A515B", TILE_FG="#FFFFFF",
+    BG="#000000", PANEL="#08080A", INK="#FFFFFF", INK_DIM="#AEB6C0",
+    INK_MUTE="#6E7680", ACCENT="#0B78D0", LINE="#1C1C20",
+    BTN="#121216", BTN_FG="#DCE3EA", ENTRY="#0E0E12", ENTRY_FG="#F2F5F9",
+    CONSOLE_FG="#B6BEC8", OK_BG="#073D16", OK_FG="#7CE38B",
+    WARN_BG="#4A3200", WARN_FG="#FFC857", ERR_BG="#4A1414", ERR_FG="#FF7B72",
+    CHIP="#121216", CHIP_FG="#9AA3AE", FOOT_HINT="#3A4048", TILE_FG="#FFFFFF",
     TILE_SUB="#E9EEF3", TILE_STATE="#F2F5F8",
+    SB_BG="#101014", SB_TROUGH="#000000", SB_ACTIVE="#26262E",
 )
-LIGHT = dict(
-    BG="#F2F4F7", PANEL="#FFFFFF", INK="#1B232C", INK_DIM="#4A5561",
-    INK_MUTE="#7A8794", ACCENT="#0B78D0", LINE="#DCE2E9",
-    BTN="#E4E9EF", BTN_FG="#26313D", ENTRY="#FFFFFF", ENTRY_FG="#1B232C",
-    CONSOLE_FG="#33404E", OK_BG="#DFF3E4", OK_FG="#17662B",
-    WARN_BG="#FFF0CE", WARN_FG="#8A5A00", ERR_BG="#FBE0E0", ERR_FG="#A32626",
-    CHIP="#E4E9EF", CHIP_FG="#4A5561", FOOT_HINT="#9AA3AE", TILE_FG="#FFFFFF",
-    TILE_SUB="#EAF0F6", TILE_STATE="#FFFFFF",
-)
-P = dict(DARK)  # 当前调色板（由主题切换更新）
+# 兼容旧代码：light 主题已移除，切到 light 也仍是全黑
+LIGHT = dict(DARK)
+P = dict(DARK)  # 当前调色板
 FONT = "TkDefaultFont"
 MONO = "TkFixedFont"
 
 
-_PALETTES = {"dark": DARK, "light": LIGHT}
+_PALETTES = {"dark": DARK, "light": DARK}
 
 # 模块级颜色名（控件创建时读取，切主题会整体重建）
 BG = DARK["BG"]
@@ -66,9 +60,64 @@ def apply_palette(name: str):
     INK_DIM, INK_MUTE = P["INK_DIM"], P["INK_MUTE"]
     ACCENT, LINE = P["ACCENT"], P["LINE"]
     THEME_NAME = name if name in _PALETTES else "dark"
+    _apply_ttk_style()
+
+
+def _apply_ttk_style():
+    """把 ttk 控件（下拉框等）强制设成黑色，消除系统默认白底。"""
+    try:
+        import tkinter.ttk as ttk
+        s = ttk.Style()
+        # clam 主题允许自定义 fieldbackground；Windows 默认 vista 不允许
+        try:
+            s.theme_use("clam")
+        except Exception:  # noqa: BLE001
+            pass
+        s.configure(
+            "Dark.TCombobox",
+            fieldbackground=P["ENTRY"], background=P["BTN"],
+            foreground=P["ENTRY_FG"], arrowcolor=P["ENTRY_FG"],
+            bordercolor=P["LINE"], lightcolor=P["BTN"], darkcolor=P["BTN"],
+            selectbackground=P["ACCENT"], selectforeground="#FFFFFF",
+            relief="flat", padding=4,
+        )
+        s.map("Dark.TCombobox",
+              fieldbackground=[("readonly", P["ENTRY"]), ("disabled", P["ENTRY"])],
+              foreground=[("readonly", P["ENTRY_FG"])],
+              arrowcolor=[("disabled", P["INK_MUTE"])])
+        # 滚动条：黑色滑块 + 黑色轨道（消除系统默认白条）
+        s.configure("Dark.Vertical.TScrollbar",
+                    background=P["SB_BG"], troughcolor=P["SB_TROUGH"],
+                    bordercolor=P["SB_TROUGH"], lightcolor=P["SB_BG"],
+                    darkcolor=P["SB_BG"], arrowcolor=P["ENTRY_FG"],
+                    relief="flat", gripcount=0)
+        s.map("Dark.Vertical.TScrollbar",
+              background=[("active", P["SB_ACTIVE"]), ("disabled", P["SB_TROUGH"])])
+    except Exception:  # noqa: BLE001
+        pass
 
 
 THEME_NAME = "dark"
+
+
+def dark_titlebar(win):
+    """用 DWM API 把任意顶层窗口的系统标题栏改为深色。"""
+    if not IS_WIN:
+        return
+    try:
+        import ctypes
+        win.update_idletasks()
+        hwnd = int(win.frame(), 16)
+        value = ctypes.c_int(1)
+        dwm = ctypes.windll.dwmapi
+        for attr in (20, 19):  # DWMWA_USE_IMMERSIVE_DARK_MODE, 19 为旧版兜底
+            r = dwm.DwmSetWindowAttribute(
+                ctypes.c_void_p(hwnd), ctypes.c_uint(attr),
+                ctypes.byref(value), ctypes.sizeof(value))
+            if r == 0:
+                break
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def shade(hex_color: str, factor: float) -> str:
@@ -182,6 +231,7 @@ class NewContainerDialog(tk.Toplevel):
         self.geometry("560x560")
         self.resizable(False, False)
         self.transient(master)
+        dark_titlebar(self)
         self.grab_set()
         self.result = None
 
@@ -245,9 +295,14 @@ class NewContainerDialog(tk.Toplevel):
         tk.Label(f6, text="磁盘大小", bg=BG, fg=INK_DIM, font=(FONT, 10), width=10,
                  anchor="w").pack(side="left")
         self.size_var = tk.StringVar(value="40")
-        tk.Spinbox(f6, from_=10, to=200, textvariable=self.size_var, width=6,
-                   bg=P["ENTRY"], fg=P["ENTRY_FG"], relief="flat", font=(FONT, 10),
-                   bd=0).pack(side="left")
+        spin_opts = dict(from_=10, to=200, textvariable=self.size_var, width=6,
+                         bg=P["ENTRY"], fg=P["ENTRY_FG"], relief="flat",
+                         font=(FONT, 10), bd=0, highlightthickness=0)
+        try:  # buttonbackground 仅在部分 Tk 版本支持
+            spin_opts["buttonbackground"] = P["BTN"]
+        except Exception:  # noqa: BLE001
+            pass
+        tk.Spinbox(f6, **spin_opts).pack(side="left")
 
         # 引擎模式（四级降级）
         f7 = tk.Frame(self, bg=BG); f7.pack(fill="x", **pad)
@@ -263,7 +318,8 @@ class NewContainerDialog(tk.Toplevel):
         ]
         import tkinter.ttk as ttk
         self.mode_combo = ttk.Combobox(f7, textvariable=self.mode_var, values=[m[0] for m in modes],
-                                       state="readonly", width=30, font=(FONT, 9))
+                                       state="readonly", width=30, font=(FONT, 9),
+                                       style="Dark.TCombobox")
         self.mode_combo.pack(side="left", fill="x")
         self.mode_combo.current(0)
         self.mode_combo.bind("<<ComboboxSelected>>", self._on_mode)
@@ -331,6 +387,7 @@ class App:
         self.tiles: list[ContainerTile] = []
         self.env = {}
         apply_palette(self._load_theme())
+        self.root.configure(bg=BG)  # 关键：窗口底色必须设为黑，否则缝隙漏出系统白
         self._build()
         self._pump()
         self.root.after(200, self.check_env_async)
@@ -348,6 +405,10 @@ class App:
                 self.root.iconbitmap(p)
             except Exception:  # noqa: BLE001
                 pass
+        self._dark_titlebar()
+
+    def _dark_titlebar(self):
+        dark_titlebar(self.root)
 
     @staticmethod
     def _theme_file() -> str:
@@ -402,8 +463,6 @@ class App:
             fg=P["OK_FG"] if is_admin() else P["CHIP_FG"],
             font=(FONT, 9, "bold"), padx=10, pady=4)
         self.admin_label.pack(side="right", padx=(6, 0))
-        MetroButton(tools, "☀/☾ 主题", self.toggle_theme, bg=P["BTN"],
-                    fg=P["BTN_FG"]).pack(side="right")
         MetroButton(tools, "环境检查", self.check_env_async, bg=P["BTN"],
                     fg=P["BTN_FG"]).pack(side="right", padx=(8, 0))
         MetroButton(tools, "启用沙盒", self.enable_sandbox, bg=P["BTN"],
@@ -440,10 +499,12 @@ class App:
     def _build_tiles(self, parent):
         wrap = tk.Frame(parent, bg=BG)
         wrap.grid(row=0, column=0, sticky="nsew")
+        import tkinter.ttk as ttk
         canvas = tk.Canvas(wrap, bg=BG, highlightthickness=0)
         canvas.pack(side="left", fill="both", expand=True)
-        sb = tk.Scrollbar(wrap, orient="vertical", command=canvas.yview)
-        sb.pack(side="right", fill="y")
+        sb = ttk.Scrollbar(wrap, orient="vertical", command=canvas.yview,
+                           style="Dark.Vertical.TScrollbar")
+        sb.pack(side="right", fill="y", padx=(4, 0))
         canvas.configure(yscrollcommand=sb.set)
         self.grid = tk.Frame(canvas, bg=BG)
         self.canvas = canvas
