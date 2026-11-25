@@ -327,6 +327,13 @@ class NewContainerDialog(tk.Toplevel):
                                   bg=BG, fg=INK_MUTE, font=(FONT, 9), anchor="w")
         self.mode_hint.pack(anchor="w", padx=20, pady=(2, 0))
 
+        tk.Label(self, text="提示：双击磁贴运行；带内核驱动的程序请选虚拟机引擎",
+                 bg=BG, fg=INK_MUTE, font=(FONT, 9)).pack(anchor="w", padx=20, pady=(16, 0))
+
+        btns = tk.Frame(self, bg=BG); btns.pack(fill="x", padx=20, pady=20)
+        MetroButton(btns, "取消", self.destroy, bg=P["BTN"], fg=P["BTN_FG"]).pack(side="right")
+        MetroButton(btns, "创建", self.ok, bg=ACCENT).pack(side="right", padx=(0, 8))
+
     def _on_mode(self, _e=None):
         hints = {
             MODE_AUTO: "自动：沙盒→应用沙盒→普通；家庭版可用，推荐",
@@ -336,13 +343,6 @@ class NewContainerDialog(tk.Toplevel):
             MODE_PLAIN: "无隔离，程序直接跑在宿主机，仅作最后兜底",
         }
         self.mode_hint.configure(text=hints.get(self.mode_var.get(), ""))
-
-        tk.Label(self, text="提示：双击磁贴运行；带内核驱动的程序请选虚拟机引擎",
-                 bg=BG, fg=INK_MUTE, font=(FONT, 9)).pack(anchor="w", padx=20, pady=(16, 0))
-
-        btns = tk.Frame(self, bg=BG); btns.pack(fill="x", padx=20, pady=20)
-        MetroButton(btns, "取消", self.destroy, bg=P["BTN"], fg=P["BTN_FG"]).pack(side="right")
-        MetroButton(btns, "创建", self.ok, bg=ACCENT).pack(side="right", padx=(0, 8))
 
     def browse(self):
         p = filedialog.askopenfilename(
@@ -610,22 +610,41 @@ class App:
 
     def on_env(self, env: dict):
         self.env = env
-        if env.get("sandbox_ready"):
-            txt, bg, fg = "沙盒就绪", P["OK_BG"], P["OK_FG"]
-        elif env.get("sandbox_feature"):
-            txt, bg, fg = "沙盒待重启", P["WARN_BG"], P["WARN_FG"]
+        sandbox = env.get("sandbox_ready")
+        vm = env.get("vm_ready")
+        appc = env.get("appcontainer")
+
+        # 当前实际启用的隔离引擎（顺序与 choose_engine 一致）
+        if sandbox:
+            active, active_key = "Windows 沙盒", "sandbox"
+        elif appc:
+            active, active_key = "应用沙盒", "appcontainer"
+        elif vm:
+            active, active_key = "Hyper-V 虚拟机", "vm"
         else:
-            txt, bg, fg = "沙盒未启用", P["ERR_BG"], P["ERR_FG"]
+            active, active_key = "无（普通进程）", "plain"
+
+        # 顶部徽标：显示"正在用哪个引擎保护你"，而不是"缺了什么功能"
+        if active_key == "plain":
+            txt, bg, fg = "! 无隔离", P["ERR_BG"], P["ERR_FG"]
+        else:
+            txt, bg, fg = f"● {active}就绪", P["OK_BG"], P["OK_FG"]
         self.env_label.configure(text=txt, bg=bg, fg=fg)
+
         self._write(
-            "环境：Windows沙盒=%s / Hyper-V=%s / 应用沙盒=%s / 管理员=%s" %
-            ("就绪" if env.get("sandbox_ready") else "无",
-             "就绪" if env.get("vm_ready") else "无",
-             "就绪" if env.get("appcontainer") else "无",
-             "是" if env.get("admin") else "否"),
-            "ok" if (env.get("sandbox_ready") or env.get("appcontainer")) else "warn")
-        if not env.get("sandbox_ready") and env.get("appcontainer"):
-            self._write("家庭版模式：Windows 沙盒/Hyper-V 不可用，已启用内置应用沙盒（AppContainer）", "warn")
+            f"隔离引擎：{active}（程序受保护） · 管理员={'是' if env.get('admin') else '否'}",
+            "ok" if active_key != "plain" else "warn")
+        self._write(
+            f"可用能力：Windows沙盒={'有' if sandbox else '无'} / "
+            f"Hyper-V={'有' if vm else '无'} / 应用沙盒={'有' if appc else '无'}"
+            + ("（硬件虚拟化已开启，家庭版未装 Hyper-V 属正常）"
+               if env.get("hypervisor") and not vm else ""),
+            "dim")
+        if active_key == "appcontainer":
+            self._write("家庭版模式：已自动启用内置应用沙盒（AppContainer），"
+                        "无需 Windows 沙盒/Hyper-V，隔离照常生效", "ok")
+        elif active_key == "plain":
+            self._write("警告：本机没有可用隔离引擎，程序将以普通进程运行（无隔离）", "err")
 
     def enable_sandbox(self):
         if not is_admin():
